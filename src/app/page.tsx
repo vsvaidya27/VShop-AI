@@ -15,10 +15,6 @@ interface Product {
   price: number
 }
 
-// interface ProductRecommendations {
-//   [category: string]: Product[]
-// }
-
 export default function HomePage() {
   const [transcript, setTranscript] = useState("")
   const [isRecording, setIsRecording] = useState(false)
@@ -26,7 +22,7 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null)
   const [parsedIntent, setParsedIntent] = useState<string | null>(null)
   const [priceRange, setPriceRange] = useState([0, 1000])
-  const [recommendations, setRecommendations] = useState<Product[] | null>(null)
+  const [recommendations, setRecommendations] = useState<Record<string, Product[]> | null>(null)
 
   useEffect(() => {
     if (error) {
@@ -98,12 +94,10 @@ export default function HomePage() {
         throw new Error(`API request failed with status ${intentRes.status}: ${errorData.message || "Unknown error"}`)
       }
       const intentData = await intentRes.json()
-      console.log(intentData.parsedIntent)
       setParsedIntent(intentData.parsedIntent)
 
       // Extract items from parsed intent
       const items = extractItemsFromIntent(intentData.parsedIntent)
-      console.log("items: ", items)
 
       // Call the products API
       const productsRes = await fetch("/api/products", {
@@ -121,7 +115,6 @@ export default function HomePage() {
         )
       }
       const productsData = await productsRes.json()
-      console.log('Products API Response:', productsData)
       setRecommendations(productsData)
     } catch (error) {
       console.error("Error processing transcript:", error)
@@ -138,33 +131,45 @@ export default function HomePage() {
     return items.map((item) => item.trim())
   }
 
-  const ProductRecommendations = ({ recommendations }: { recommendations: Product[] }) => {
-    console.log('Rendering ProductRecommendations with:', recommendations)
+  const ProductRecommendations = ({ recommendations }: { recommendations: Record<string, Product[]> }) => {
     return (
-      <ul className="space-y-2">
-      {recommendations.map((product: Product) => (
-        <li key={product.asin} className="border-b pb-2">
-          <h4 className="font-semibold">{product.name}</h4>
-          <p className="text-sm text-gray-600">{product.description}</p>
-          <p className="text-sm font-medium">Price: ${product.price.toFixed(2)}</p>
-          <p className="text-xs text-gray-500">ASIN: {product.asin}</p>
-        </li>
-      ))}
-    </ul>
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {Object.entries(recommendations).map(([category, products]) => (
+          <Card key={category}>
+            <CardHeader>
+              <CardTitle>{category}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-4">
+                {products.map((product: Product) => (
+                  <li key={product.asin} className="border-b pb-4">
+                    <h4 className="font-semibold text-lg">{product.name}</h4>
+                    <p className="text-sm text-gray-600 mt-1">{product.description}</p>
+                    <div className="flex justify-between items-center mt-2">
+                      <p className="text-sm font-medium text-green-600">Price: ${product.price.toFixed(2)}</p>
+                      <p className="text-xs text-gray-500">ASIN: {product.asin}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     )
   }
 
   return (
-    <main className="container mx-auto p-4">
-      <h1 className="text-3xl font-bold mb-6">AI-Powered Voice Shopping Assistant</h1>
-      <div className="flex flex-col gap-4 mb-6">
-        <Card>
+    <main className="container mx-auto p-4 bg-gray-50 min-h-screen">
+      <h1 className="text-4xl font-bold mb-8 text-center text-gray-800">AI-Powered Voice Shopping Assistant</h1>
+      <div className="max-w-4xl mx-auto">
+        <Card className="mb-8">
           <CardHeader>
-            <CardTitle>Set Your Budget</CardTitle>
+            <CardTitle className="text-2xl">Set Your Budget</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-4">
-              <DollarSign className="h-4 w-4" />
+              <DollarSign className="h-6 w-6 text-green-500" />
               <Slider
                 min={0}
                 max={1000}
@@ -173,62 +178,70 @@ export default function HomePage() {
                 onValueChange={setPriceRange}
                 className="flex-grow"
               />
-              <span className="min-w-[80px] text-right">
+              <span className="min-w-[100px] text-right text-lg font-semibold">
                 ${priceRange[0]} - ${priceRange[1]}
               </span>
             </div>
           </CardContent>
         </Card>
-        <div className="flex gap-4">
-          <Button onClick={startRecording} disabled={isRecording}>
+        <div className="flex gap-4 justify-center mb-8">
+          <Button onClick={startRecording} disabled={isRecording} size="lg" className="w-48">
             {isRecording ? "Recording..." : "Start Recording"}
           </Button>
-          <Button onClick={processTranscript} disabled={!transcript || isProcessing}>
+          <Button onClick={processTranscript} disabled={!transcript || isProcessing} size="lg" className="w-48">
             {isProcessing ? "Processing..." : "Process Transcript"}
           </Button>
         </div>
-      </div>
-      {error && (
-        <Alert variant="destructive" className="mb-6">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Transcript</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p>{transcript || "No transcript available. Start recording to see the transcript."}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Parsed Intent</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {parsedIntent ? (
-              <div>
-                <Badge className="mb-2">
-                  <ShoppingCart className="mr-1 h-3 w-3" />
-                  Shopping Intent
-                </Badge>
-                <p className="whitespace-pre-wrap">{parsedIntent}</p>
-              </div>
-            ) : (
-              <p>No intent parsed yet. Process the transcript to see the results.</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-      {recommendations && (
-        <div className="mt-6">
-          <h2 className="text-2xl font-bold mb-4">Product Recommendations</h2>
-          <ProductRecommendations recommendations={recommendations} />
+        {error && (
+          <Alert variant="destructive" className="mb-8">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        <div className="grid gap-8 md:grid-cols-2 mb-8">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <span className="mr-2">Transcript</span>
+                {transcript && <Badge variant="secondary">Recorded</Badge>}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-700">
+                {transcript || "No transcript available. Start recording to see the transcript."}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <span className="mr-2">Parsed Intent</span>
+                {parsedIntent && (
+                  <Badge className="bg-green-500 text-white">
+                    <ShoppingCart className="mr-1 h-3 w-3" />
+                    Shopping Intent
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {parsedIntent ? (
+                <p className="whitespace-pre-wrap text-gray-700">{parsedIntent}</p>
+              ) : (
+                <p className="text-gray-500">No intent parsed yet. Process the transcript to see the results.</p>
+              )}
+            </CardContent>
+          </Card>
         </div>
-      )}
+        {recommendations && (
+          <div className="mt-8">
+            <h2 className="text-3xl font-bold mb-6 text-center text-gray-800">Product Recommendations</h2>
+            <ProductRecommendations recommendations={recommendations} />
+          </div>
+        )}
+      </div>
     </main>
   )
 }
+
