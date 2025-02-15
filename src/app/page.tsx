@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 "use client"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -6,16 +8,23 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle, ShoppingCart, DollarSign } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Slider } from "@/components/ui/slider"
+import Image from "next/image"
 
 interface Product {
-  asin: string
-  name: string
+  id: string // Matches Rye's "id" field
+  title: string
+  marketplace: string
   description: string
-  price: number
-}
-
-interface ProductRecommendations {
-  [category: string]: Product[]
+  vendor: string
+  url: string
+  isAvailable: boolean
+  images: { url: string }[]
+  price: {
+    currency: string
+    displayValue: string
+    value: number
+  }
+  ASIN?: string
 }
 
 export default function HomePage() {
@@ -25,7 +34,7 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null)
   const [parsedIntent, setParsedIntent] = useState<string | null>(null)
   const [priceRange, setPriceRange] = useState([0, 1000])
-  const [recommendations, setRecommendations] = useState<Product[] | null>(null) // Changed type here
+  const [recommendations, setRecommendations] = useState<Product[] | null>(null)
 
   useEffect(() => {
     if (error) {
@@ -43,7 +52,6 @@ export default function HomePage() {
       await navigator.mediaDevices.getUserMedia({ audio: true })
 
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-
       if (!SpeechRecognition) {
         throw new Error("Your browser does not support Speech Recognition.")
       }
@@ -57,13 +65,11 @@ export default function HomePage() {
       recognition.onend = () => setIsRecording(false)
 
       recognition.onresult = (event: any) => {
-        //Fixed: Added any type to SpeechRecognitionEvent
         const transcriptResult = event.results[0][0].transcript
         setTranscript(transcriptResult)
       }
 
       recognition.onerror = (event: any) => {
-        //Fixed: Added any type to SpeechRecognitionErrorEvent
         console.error("Speech recognition error:", event.error)
         setError(`Speech recognition error: ${event.error}`)
         setIsRecording(false)
@@ -83,6 +89,7 @@ export default function HomePage() {
     setParsedIntent(null)
     setRecommendations(null)
     try {
+      // 1. Parse the user's intent
       const intentRes = await fetch("/api/intent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -99,25 +106,37 @@ export default function HomePage() {
         throw new Error(`API request failed with status ${intentRes.status}: ${errorData.message || "Unknown error"}`)
       }
       const intentData = await intentRes.json()
+      console.log(intentData.parsedIntent)
       setParsedIntent(intentData.parsedIntent)
 
-      // Call the products API
-      const productsRes = await fetch("/api/products", {
+      // 2. Get ASINs from /api/products
+      const asinsRes = await fetch("/api/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           items: intentData.parsedIntent,
-          budget: priceRange[1], // Use the upper bound of the price range as the budget
+          lower: priceRange[0],
+          upper: priceRange[1],
         }),
       })
-      if (!productsRes.ok) {
-        const errorData = await productsRes.json()
+      const asinsData: string[] = await asinsRes.json()
+      console.log("Returned ASINs:", asinsData)
+
+      // 3. Fetch actual product details from /api/rye-list
+      const listRes = await fetch("/api/rye-list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ asins: asinsData }),
+      })
+      if (!listRes.ok) {
+        const errorData = await listRes.json()
         throw new Error(
-          `Products API request failed with status ${productsRes.status}: ${errorData.message || "Unknown error"}`,
+          `Rye list request failed with status ${listRes.status}: ${errorData.message || "Unknown error"}`,
         )
       }
-      const productsData = await productsRes.json()
-      console.log("Returned products:", productsData)
+      const productsData: Product[] = await listRes.json()
+      console.log("Product details:", productsData)
+
       setRecommendations(productsData)
     } catch (error) {
       console.error("Error processing transcript:", error)
@@ -127,47 +146,56 @@ export default function HomePage() {
     }
   }
 
-  const ProductRecommendations = ({ recommendations }: { recommendations: Product[] }) => {
-    const handleAddToCart = async (asin: string) => {
-      try {
-        const response = await fetch("/api/rye", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ asin }),
-        })
+  // Updated to call /api/rye-buy
+  const handleBuyNow = async (asin: string) => {
+    try {
+      const response = await fetch("/api/rye-buy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ asin }),
+      })
 
-        if (!response.ok) {
-          throw new Error("Failed to add item to cart")
-        }
-
-        const data = await response.json()
-        console.log("Item added to cart:", data)
-        // You can add additional logic here, such as updating the UI or showing a notification
-      } catch (error) {
-        console.error("Error adding item to cart:", error)
-        // Handle the error, e.g., show an error message to the user
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(`Buy request failed: ${errorData.message || "Unknown error"}`)
       }
-    }
 
+      const data = await response.json()
+      console.log("Item bought successfully:", data)
+      // You could show a success message or update UI
+    } catch (error) {
+      console.error("Error buying item:", error)
+      setError("Error buying item. Please try again.")
+    }
+  }
+
+  const ProductRecommendations = ({ recommendations }: { recommendations: Product[] }) => {
     return (
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {Array.isArray(recommendations) && recommendations.length > 0 ? (
-          recommendations.map((product: Product) => (
-            <Card key={product.asin}>
-              <CardHeader>
-                <CardTitle>{product.name}</CardTitle>
+        {recommendations.length > 0 ? (
+          recommendations.map((product, index) => (
+            <Card key={product.id || product.ASIN || index} className="flex flex-col h-full">
+              <CardHeader className="flex-none">
+                <CardTitle className="line-clamp-2 h-12">{product.title}</CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="text-sm text-gray-600 mt-1">{product.description}</p>
-                <div className="flex justify-between items-center mt-2">
-                  <p className="text-sm font-medium text-green-600">Price: ${product.price.toFixed(2)}</p>
-                  <p className="text-xs text-gray-500">ASIN: {product.asin}</p>
+              <CardContent className="flex-1 flex flex-col">
+                <div className="flex-none">
+                  <Image
+                    src={product.images[0].url || "/placeholder.svg"}
+                    alt={product.title}
+                    className="w-full h-48 object-contain bg-white"
+                    width={500}
+                    height={300}
+                  />
+                </div>
+                <p className="text-sm text-gray-600 mt-2 line-clamp-2 flex-1">{product.description}</p>
+                <div className="flex justify-between items-center mt-4">
+                  <p className="text-sm font-medium text-green-600">Price: {product.price.displayValue}</p>
+                  {product.ASIN && <p className="text-xs text-gray-500">ASIN: {product.ASIN}</p>}
                 </div>
                 <Button
                   className="w-full mt-4 bg-green-500 hover:bg-green-600 text-white"
-                  onClick={() => handleAddToCart(product.asin)}
+                  onClick={() => handleBuyNow(product.ASIN || product.id)}
                 >
                   <ShoppingCart className="mr-2 h-4 w-4" />
                   Buy Now
@@ -267,4 +295,3 @@ export default function HomePage() {
     </main>
   )
 }
-

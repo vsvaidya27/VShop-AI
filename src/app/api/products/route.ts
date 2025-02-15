@@ -1,3 +1,7 @@
+// src/api/products/route.ts
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { NextResponse } from "next/server";
 import Exa from "exa-js";
 import OpenAI from "openai";
@@ -28,20 +32,13 @@ export async function POST(request: Request) {
     const systemPrompt = `
       You are a helpful shopping assistant. 
       You have access to these search results about Amazon products. 
-      Provide the top 4-5 product recommendations for the given item(s) and budget. 
-      Each product should have:
-        - asin
-        - name
-        - short description
-        - price
+      Provide the top 8-9 product recommendations for the given item(s) and budget. 
+      Only respond with the asin (Amazon Standard Identification Number) for each product.
       Strictly respond in valid JSON format only (no code fences, disclaimers, etc.).
       Example final output:
       [
         {
           "asin": "B07XYZ1234",
-          "name": "Sample Product",
-          "description": "Short description",
-          "price": 29.99
         },
         ...
       ]
@@ -51,7 +48,7 @@ export async function POST(request: Request) {
       Here are the Exa search results:
       ${JSON.stringify(exaResult)}
 
-      Please suggest the top 4-5 products in valid JSON format only.
+      Please suggest the top 8-9 products in valid JSON format only.
     `;
 
     // 4. Call OpenAI Chat Completions
@@ -87,10 +84,13 @@ export async function POST(request: Request) {
     // Log the products before returning
     console.log("Products to return:", parsed);
 
-    // 7. Return final JSON
-    return NextResponse.json(parsed);
+    const asins = parsed.map((obj: any) => obj.asin).filter(Boolean);
+
+    // Return the ASINs directly
+    return NextResponse.json(asins);
   } catch (err: any) {
     console.error("Error in /api/products route:", err);
     return NextResponse.json({ message: err.message }, { status: 500 });
   }
 }
+

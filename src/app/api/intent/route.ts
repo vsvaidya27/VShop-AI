@@ -1,4 +1,4 @@
-// scr/api/intent/route.ts
+// src/api/intent/route.ts
 import { NextResponse } from "next/server";
 
 // Replace this with your real API key or environment variable
