@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -15,6 +14,10 @@ interface Product {
   price: number
 }
 
+interface ProductRecommendations {
+  [category: string]: Product[]
+}
+
 export default function HomePage() {
   const [transcript, setTranscript] = useState("")
   const [isRecording, setIsRecording] = useState(false)
@@ -22,7 +25,7 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null)
   const [parsedIntent, setParsedIntent] = useState<string | null>(null)
   const [priceRange, setPriceRange] = useState([0, 1000])
-  const [recommendations, setRecommendations] = useState<Record<string, Product[]> | null>(null)
+  const [recommendations, setRecommendations] = useState<Product[] | null>(null) // Changed type here
 
   useEffect(() => {
     if (error) {
@@ -32,6 +35,7 @@ export default function HomePage() {
   }, [error])
 
   const startRecording = async () => {
+    console.log("Starting recording...")
     setError(null)
     setParsedIntent(null)
     setRecommendations(null)
@@ -74,6 +78,7 @@ export default function HomePage() {
   }
 
   const processTranscript = async () => {
+    console.log("Processing transcript:", transcript)
     setIsProcessing(true)
     setParsedIntent(null)
     setRecommendations(null)
@@ -96,9 +101,6 @@ export default function HomePage() {
       const intentData = await intentRes.json()
       setParsedIntent(intentData.parsedIntent)
 
-      // Extract items from parsed intent
-      //const items = extractItemsFromIntent(intentData.parsedIntent)
-
       // Call the products API
       const productsRes = await fetch("/api/products", {
         method: "POST",
@@ -115,23 +117,10 @@ export default function HomePage() {
         )
       }
       const productsData = await productsRes.json()
-      
-      // Debugging: Log the productsData to check its structure
-      console.log("Products API Response:", productsData);
-
-      // Ensure productsData is an array
-      if (Array.isArray(productsData)) {
-        // Transform productsData into the expected Record<string, Product[]> format
-        const formattedRecommendations: Record<string, Product[]> = {
-          default: productsData // Assuming you want to store all products under a 'default' key
-        };
-        setRecommendations(formattedRecommendations);
-      } else {
-        console.error("Expected an array but received:", productsData);
-        setError("Unexpected response format from products API.");
-      }
+      console.log("Returned products:", productsData)
+      setRecommendations(productsData)
     } catch (error) {
-      console.error("Error processing transcript:", error, "Error details:", (error as Error).message)
+      console.error("Error processing transcript:", error)
       setError("Error processing transcript. Please try again.")
     } finally {
       setIsProcessing(false)
@@ -139,8 +128,28 @@ export default function HomePage() {
   }
 
   const ProductRecommendations = ({ recommendations }: { recommendations: Product[] }) => {
-    // Debugging: Log the recommendations to check their structure
-    console.log("Recommendations:", recommendations);
+    const handleAddToCart = async (asin: string) => {
+      try {
+        const response = await fetch("/api/rye", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ asin }),
+        })
+
+        if (!response.ok) {
+          throw new Error("Failed to add item to cart")
+        }
+
+        const data = await response.json()
+        console.log("Item added to cart:", data)
+        // You can add additional logic here, such as updating the UI or showing a notification
+      } catch (error) {
+        console.error("Error adding item to cart:", error)
+        // Handle the error, e.g., show an error message to the user
+      }
+    }
 
     return (
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -156,6 +165,13 @@ export default function HomePage() {
                   <p className="text-sm font-medium text-green-600">Price: ${product.price.toFixed(2)}</p>
                   <p className="text-xs text-gray-500">ASIN: {product.asin}</p>
                 </div>
+                <Button
+                  className="w-full mt-4 bg-green-500 hover:bg-green-600 text-white"
+                  onClick={() => handleAddToCart(product.asin)}
+                >
+                  <ShoppingCart className="mr-2 h-4 w-4" />
+                  Buy Now
+                </Button>
               </CardContent>
             </Card>
           ))
@@ -244,9 +260,7 @@ export default function HomePage() {
         {recommendations && (
           <div className="mt-8">
             <h2 className="text-3xl font-bold mb-6 text-center text-gray-800">Product Recommendations</h2>
-            {recommendations?.default && (
-              <ProductRecommendations recommendations={recommendations.default} />
-            )}
+            <ProductRecommendations recommendations={recommendations} />
           </div>
         )}
       </div>

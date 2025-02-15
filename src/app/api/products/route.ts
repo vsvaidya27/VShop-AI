@@ -10,12 +10,12 @@ const openai = new OpenAI({
 
 export async function POST(request: Request) {
   try {
-    const { items, budget } = await request.json();
+    const { items, lower, upper } = await request.json();
 
     // 2. Step 1: Retrieve with Exa
     // We'll search the web for "best Amazon products for <items> under <budget>"
     // You can tweak the query, e.g. add domain filters or advanced options
-    const exaQuery = `best Amazon products for ${items} under ${budget}`;
+    const exaQuery = `best Amazon products for ${items} reasonably within price range from ${lower} to ${upper}`;
     const exaResult = await exa.searchAndContents(exaQuery, {
       type: "neural",
       useAutoprompt: true,
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
       ]
     `;
     const userMessage = `
-      User wants: "${items}" within a budget of $${budget}.
+      User wants: "${items}" within a budget range of $${lower} to $${upper}.
       Here are the Exa search results:
       ${JSON.stringify(exaResult)}
 
