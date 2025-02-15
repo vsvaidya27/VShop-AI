@@ -1,61 +1,96 @@
-// src/app/api/products/route.ts
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 import { NextResponse } from "next/server";
+import Exa from "exa-js";
+import OpenAI from "openai";
 
-// Replace this with your real API key or environment variable
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+// 1. Instantiate Exa & OpenAI clients
+const exa = new Exa(process.env.EXA_API_KEY);
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 export async function POST(request: Request) {
   try {
     const { items, budget } = await request.json();
 
-    const messages = [
-      {
-        role: "system" as const,
-        content: "You are a helpful shopping assistant. Provide the top 4-5 Amazon products for the given item and budget. Each product should have: - ASIN - Name - Short description - Price. **Strictly respond in valid JSON format and only with a JSON Object. NO OTHER TEX. Do NOT include triple backticks or code fences.**, e.g.: [{ \"asin\": \"B07XYZ1234\", \"name\": \"Product\", \"description\": \"Short description here\", \"price\": 29.99 }, ...].",
-      },
-      {
-        role: "user" as const,
-        content: `I'm looking for "${items}" with a budget of ${budget}.`,
-      },
-    ];
-
-    // 1. Call your hosted LLM endpoint (e.g., OpenAI)
-    const openAiRes = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-3.5-turbo",
-        messages: messages,
-      }),
+    // 2. Step 1: Retrieve with Exa
+    // We'll search the web for "best Amazon products for <items> under <budget>"
+    // You can tweak the query, e.g. add domain filters or advanced options
+    const exaQuery = `best Amazon products for ${items} under ${budget}`;
+    const exaResult = await exa.searchAndContents(exaQuery, {
+      type: "neural",
+      useAutoprompt: true,
+      numResults: 5,  // get top 5 relevant pages
+      text: true,     // return text content
     });
 
-    const jsonData = await openAiRes.json();
-    const rawMessage = jsonData.choices?.[0]?.message?.content ?? "";
+    // 3. Step 2: Combine Exa results + user query, pass to OpenAI
+    // We'll instruct the LLM to produce strictly valid JSON (no code fences).
+    const systemPrompt = `
+      You are a helpful shopping assistant. 
+      You have access to these search results about Amazon products. 
+      Provide the top 4-5 product recommendations for the given item(s) and budget. 
+      Each product should have:
+        - asin
+        - name
+        - short description
+        - price
+      Strictly respond in valid JSON format only (no code fences, disclaimers, etc.).
+      Example final output:
+      [
+        {
+          "asin": "B07XYZ1234",
+          "name": "Sample Product",
+          "description": "Short description",
+          "price": 29.99
+        },
+        ...
+      ]
+    `;
+    const userMessage = `
+      User wants: "${items}" within a budget of $${budget}.
+      Here are the Exa search results:
+      ${JSON.stringify(exaResult)}
 
-    // 3. Remove code fences if they appear
-    const sanitized = rawMessage.replace(/```(\w+)?/g, "").trim();
+      Please suggest the top 4-5 products in valid JSON format only.
+    `;
 
-    // 4. Parse the LLM's JSON
+    // 4. Call OpenAI Chat Completions
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
+    });
+
+    // 5. Extract the LLM's raw text
+    const rawContent = response.choices?.[0]?.message?.content || "";
+    // Remove code fences if any
+    const sanitized = rawContent.replace(/```(\w+)?/g, "").trim();
+
+    // 6. Parse the JSON
     let parsed;
     try {
       parsed = JSON.parse(sanitized);
+      // Log the parsed response for debugging
+      console.log("Parsed response:", parsed);
+
+      // Ensure parsed is an array
+      if (!Array.isArray(parsed)) {
+        throw new Error("Parsed response is not an array");
+      }
     } catch (err) {
       console.error("Error parsing LLM JSON:", err);
-      return NextResponse.json(
-        { error: "Invalid JSON from LLM" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "Invalid JSON from LLM" }, { status: 500 });
     }
 
-    // 5. Return the parsed object/array directly
+    // Log the products before returning
+    console.log("Products to return:", parsed);
+
+    // 7. Return final JSON
     return NextResponse.json(parsed);
-  } catch (error: any) {
-    console.error("Error calling OpenAI:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (err: any) {
+    console.error("Error in /api/products route:", err);
+    return NextResponse.json({ message: err.message }, { status: 500 });
   }
 }

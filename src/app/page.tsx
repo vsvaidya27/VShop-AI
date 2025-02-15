@@ -97,14 +97,14 @@ export default function HomePage() {
       setParsedIntent(intentData.parsedIntent)
 
       // Extract items from parsed intent
-      const items = extractItemsFromIntent(intentData.parsedIntent)
+      //const items = extractItemsFromIntent(intentData.parsedIntent)
 
       // Call the products API
       const productsRes = await fetch("/api/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items,
+          items: intentData.parsedIntent,
           budget: priceRange[1], // Use the upper bound of the price range as the budget
         }),
       })
@@ -115,46 +115,53 @@ export default function HomePage() {
         )
       }
       const productsData = await productsRes.json()
-      setRecommendations(productsData)
+      
+      // Debugging: Log the productsData to check its structure
+      console.log("Products API Response:", productsData);
+
+      // Ensure productsData is an array
+      if (Array.isArray(productsData)) {
+        // Transform productsData into the expected Record<string, Product[]> format
+        const formattedRecommendations: Record<string, Product[]> = {
+          default: productsData // Assuming you want to store all products under a 'default' key
+        };
+        setRecommendations(formattedRecommendations);
+      } else {
+        console.error("Expected an array but received:", productsData);
+        setError("Unexpected response format from products API.");
+      }
     } catch (error) {
-      console.error("Error processing transcript:", error)
+      console.error("Error processing transcript:", error, "Error details:", (error as Error).message)
       setError("Error processing transcript. Please try again.")
     } finally {
       setIsProcessing(false)
     }
   }
 
-  const extractItemsFromIntent = (intent: string): string[] => {
-    // This is a simple implementation. You might want to use a more sophisticated
-    // method to extract items from the parsed intent, possibly using NLP techniques.
-    const items = intent.match(/\b([\w\s]+?)(?=,|\sand\s|$)/g) || []
-    return items.map((item) => item.trim())
-  }
+  const ProductRecommendations = ({ recommendations }: { recommendations: Product[] }) => {
+    // Debugging: Log the recommendations to check their structure
+    console.log("Recommendations:", recommendations);
 
-  const ProductRecommendations = ({ recommendations }: { recommendations: Record<string, Product[]> }) => {
     return (
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {Object.entries(recommendations).map(([category, products]) => (
-          <Card key={category}>
-            <CardHeader>
-              <CardTitle>{category}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-4">
-                {products.map((product: Product) => (
-                  <li key={product.asin} className="border-b pb-4">
-                    <h4 className="font-semibold text-lg">{product.name}</h4>
-                    <p className="text-sm text-gray-600 mt-1">{product.description}</p>
-                    <div className="flex justify-between items-center mt-2">
-                      <p className="text-sm font-medium text-green-600">Price: ${product.price.toFixed(2)}</p>
-                      <p className="text-xs text-gray-500">ASIN: {product.asin}</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        ))}
+        {Array.isArray(recommendations) && recommendations.length > 0 ? (
+          recommendations.map((product: Product) => (
+            <Card key={product.asin}>
+              <CardHeader>
+                <CardTitle>{product.name}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-600 mt-1">{product.description}</p>
+                <div className="flex justify-between items-center mt-2">
+                  <p className="text-sm font-medium text-green-600">Price: ${product.price.toFixed(2)}</p>
+                  <p className="text-xs text-gray-500">ASIN: {product.asin}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          <p>No products found or an error occurred.</p>
+        )}
       </div>
     )
   }
@@ -237,7 +244,9 @@ export default function HomePage() {
         {recommendations && (
           <div className="mt-8">
             <h2 className="text-3xl font-bold mb-6 text-center text-gray-800">Product Recommendations</h2>
-            <ProductRecommendations recommendations={recommendations} />
+            {recommendations?.default && (
+              <ProductRecommendations recommendations={recommendations.default} />
+            )}
           </div>
         )}
       </div>
