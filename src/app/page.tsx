@@ -12,6 +12,18 @@ import { Check } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { motion, AnimatePresence } from "framer-motion"
+import { ElevenLabsClient, play } from "elevenlabs";
+import axios from "axios"
+import * as dotenv from "dotenv";
+
+dotenv.config();
+
+const ELEVENLABS_API_KEY = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
+
+const VOICE_ID = '29vD33N1CtxCmqQRPOHJ'
+const client = new ElevenLabsClient({
+  apiKey: ELEVENLABS_API_KEY,
+});
 
 interface Product {
   id: string
@@ -40,6 +52,7 @@ export default function HomePage() {
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([])
   const [purchasedItem, setPurchasedItem] = useState<any>(null)
   const [progress, setProgress] = useState(0)
+  const [priceFeed, setPriceFeed] = useState<any>(null);
 
   useEffect(() => {
     if (error) {
@@ -98,7 +111,34 @@ export default function HomePage() {
       setIsRecording(false)
     }
   }
+  const createAudioStreamFromText = async (text: string): Promise<Blob> => {
+    try {
+      const requestBody = {
+        text,
+        model_id: "eleven_multilingual_v2",
+        voice_settings: { stability: 0.8, similarity_boost: 0.8 },
+      };
 
+      console.log("Request Body:", requestBody); // Log the request body
+
+      const response = await axios.post(
+        `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/stream`,
+        requestBody,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "xi-api-key": ELEVENLABS_API_KEY,
+          },
+          responseType: "blob", // Get a blob response
+        }
+      );
+
+      return response.data; // Returns a Blob
+    } catch (error) {
+  
+      throw new Error("Failed to create audio stream.");
+    }
+  }
   const processTranscript = async () => {
     console.log("Processing transcript:", transcript)
     setIsProcessing(true)
@@ -120,7 +160,7 @@ export default function HomePage() {
       }
 
       const data = await response.json()
-      console.log("API Response:", data.parsedIntent)
+      console.log("API Response:", data)
 
       let formattedIntent
       try {
@@ -129,17 +169,43 @@ export default function HomePage() {
         console.error("Failed to parse parsedIntent:", error)
         formattedIntent = [data.parsedIntent]
       }
-      if (formattedIntent.join(", ") === "I didn't understand, please try again.") {
-        const aiMessage = { role: "assistant", content: "I didn't understand, please try again." }
-        setMessages((prev) => [...prev, aiMessage])
+        // Check if the last element ends with a question mark
+      const lastElement = formattedIntent[formattedIntent.length - 1]
+      if (lastElement.endsWith("?")) {
+        console.log("The last element is a question:", lastElement)
+        // Play audio for the message
+        const audioBlob = await createAudioStreamFromText(formattedIntent.join(", "))
+        const audioUrl = URL.createObjectURL(audioBlob)
+        const audio = new Audio(audioUrl)
+        await audio.play() // Play the audio
+      
         return
+        // You can add additional logic here if needed
       }
 
+      // Check if the AI message indicates it didn't understand
+      else if (formattedIntent.join(", ") === "I didn't understand, please try again." || formattedIntent.join(", ") === "[I didn't understand, please try again.]" ) {
+        const aiMessage = { role: "assistant", content: "I didn't understand, please try again." }
+        setMessages((prev) => [...prev, aiMessage])
+  
+          // Play audio for the message
+          const audioBlob = await createAudioStreamFromText("I didn't understand, please try again.")
+          const audioUrl = URL.createObjectURL(audioBlob)
+          const audio = new Audio(audioUrl)
+          await audio.play() // Play the audio
+          return
+        }
+  
       const searchMessage = `Searching for: ${formattedIntent.join(", ")}`
       const aiMessage = { role: "assistant", content: searchMessage }
 
       setMessages((prev) => [...prev, aiMessage])
       setParsedIntent(formattedIntent)
+      const audioBlob = await createAudioStreamFromText(searchMessage)
+      const audioUrl = URL.createObjectURL(audioBlob)
+      const audio = new Audio(audioUrl)
+      await audio.play() // Play the audio
+
 
       const asinsRes = await fetch("/api/products", {
         method: "POST",
@@ -270,7 +336,7 @@ export default function HomePage() {
           {recommendations.length > 0 ? (
             recommendations.map((product, index) => (
               <motion.div
-                key={product.id || product.ASIN || index}
+                key={product.ASIN}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
@@ -321,6 +387,30 @@ export default function HomePage() {
     )
   }
 
+  const fetchPriceFeed = async () => {
+    try {
+      const response = await fetch('/api/eoracle', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ uint16: 2 }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error('Failed to fetch price feed');
+      }
+
+      const data = await response.json();
+      setPriceFeed(data.priceFeed);
+      console.log("Fetched Price Feed:", data);
+    } catch (error) {
+      console.error("Error fetching price feed:", error);
+    }
+  };
+
   return (
     <main className="container mx-auto p-4 text-white min-h-screen">
       <div className="flex justify-start items-center w-1/2">
@@ -328,7 +418,7 @@ export default function HomePage() {
           <DollarSign className="inline-block mr-2 text-green-500" />
           AI-Powered Smart Shopping Assistant
         </h1>
-      </div>
+      </di
       {purchasedItem ? (
         <PurchaseConfirmation item={purchasedItem} />
       ) : (
@@ -461,6 +551,18 @@ export default function HomePage() {
                   <h2 className="text-3xl font-bold mb-4 text-center text-green-400">Product Recommendations</h2>
                   <ProductRecommendations recommendations={recommendations} />
                 </div>
+              </div>
+            )}
+            <div className="flex justify-center mb-4">
+              <Button onClick={fetchPriceFeed} className="bg-blue-500 hover:bg-blue-600 text-white">
+                Get Price Feed
+              </Button>
+            </div>
+            {priceFeed && (
+              <div className="mt-4">
+                <h2 className="text-lg font-bold">Price Feed Data:</h2>
+                <p>Price: {priceFeed.value.toString()}</p>
+                <p>Timestamp: {priceFeed.timestamp.toString()}</p>
               </div>
             )}
           </div>
