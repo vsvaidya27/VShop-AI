@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 "use client"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -197,6 +199,30 @@ export default function HomePage() {
     }
   }
 
+  const handleBuyETH = async (asin: string) => {
+    try {
+      const response = await fetch("/api/crypto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ asin }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(`Crypto buy request failed: ${errorData.message || "Unknown error"}`)
+      }
+
+      const data = await response.json()
+      console.log("Item bought with ETH successfully:", data)
+
+      // Handle successful ETH purchase (you may want to update this based on your requirements)
+      setError("ETH purchase successful! (This is a placeholder message)")
+    } catch (error) {
+      console.error("Error buying item with ETH:", error)
+      setError("Error buying item with ETH. Please try again.")
+    }
+  }
+
   const handlePlaceAnotherOrder = () => {
     setTranscript("")
     setParsedIntent(null)
@@ -265,17 +291,24 @@ export default function HomePage() {
                       />
                     </div>
                     <p className="text-sm text-gray-300 mt-2 line-clamp-2 flex-1">{product.description}</p>
-                    <div className="flex justify-between items-center mt-4">
-                      <p className="text-sm font-medium text-green-400">Price: {product.price.displayValue}</p>
-                      {product.ASIN && <p className="text-xs text-gray-400">ASIN: {product.ASIN}</p>}
+                    <div className="flex justify-between mt-4">
+                      <div className="flex justify-between w-full">
+                        <Button
+                          className="w-[48%] bg-green-500 hover:bg-green-600 text-white"
+                          onClick={() => handleBuyNow(product.ASIN || product.id)}
+                        >
+                          <DollarSign className="mr-2 h-4 w-4" />
+                          Buy USD
+                        </Button>
+                        <Button
+                          className="w-[48%] bg-blue-500 hover:bg-blue-600 text-white"
+                          onClick={() => handleBuyETH(product.ASIN || product.id)}
+                        >
+                          <ShoppingCart className="mr-2 h-4 w-4" />
+                          Buy ETH
+                        </Button>
+                      </div>
                     </div>
-                    <Button
-                      className="w-full mt-4 bg-green-500 hover:bg-green-600 text-white"
-                      onClick={() => handleBuyNow(product.ASIN || product.id)}
-                    >
-                      <ShoppingCart className="mr-2 h-4 w-4" />
-                      Buy Now
-                    </Button>
                   </CardContent>
                 </Card>
               </motion.div>
@@ -289,7 +322,7 @@ export default function HomePage() {
   }
 
   return (
-    <main className="container mx-auto p-4 bg-gray-900 text-white min-h-screen">
+    <main className="container mx-auto p-4 text-white min-h-screen">
       <div className="flex justify-start items-center w-1/2">
         <h1 className="text-4xl font-bold mb-8 text-left text-green-400">
           <DollarSign className="inline-block mr-2 text-green-500" />
