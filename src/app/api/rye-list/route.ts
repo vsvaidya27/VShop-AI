@@ -4,7 +4,6 @@
 
 import { NextResponse } from "next/server";
 import { GraphQLClient, gql } from "graphql-request";
-import { generateToken } from "../../../lib/jwt";
 
 // This is the staging endpoint for Rye GraphQL
 const RYE_GRAPHQL_ENDPOINT = "https://staging.graphql.api.rye.com/v1/query";

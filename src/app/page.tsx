@@ -5,10 +5,10 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, ShoppingCart, DollarSign } from "lucide-react"
+import { AlertCircle, ShoppingCart } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { Slider } from "@/components/ui/slider"
 import Image from "next/image"
+import { Check } from "lucide-react"
 
 interface Product {
   id: string // Matches Rye's "id" field
@@ -33,9 +33,9 @@ export default function HomePage() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [parsedIntent, setParsedIntent] = useState<string | null>(null)
-  const [priceRange, setPriceRange] = useState([0, 1000])
   const [recommendations, setRecommendations] = useState<Product[] | null>(null)
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([])
+  const [purchasedItem, setPurchasedItem] = useState<any>(null)
 
   useEffect(() => {
     if (error) {
@@ -136,8 +136,6 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           items: formattedIntent,
-          lower: priceRange[0],
-          upper: priceRange[1],
         }),
       })
       const asinsData: string[] = await asinsRes.json()
@@ -169,6 +167,10 @@ export default function HomePage() {
 
   // Updated to call /api/rye-buy
   const handleBuyNow = async (asin: string) => {
+     // 1) Find the product from recommendations
+    const product = recommendations?.find(
+      (prod) => prod.ASIN === asin || prod.id === asin
+    );
     try {
       const response = await fetch("/api/rye-buy", {
         method: "POST",
@@ -182,12 +184,55 @@ export default function HomePage() {
       }
 
       const data = await response.json()
-      console.log("Item bought successfully:", data)
-      // You could show a success message or update UI
+      console.log("Item bought successfully:", data);
+
+      setPurchasedItem(product);
+      setRecommendations((prev) => prev);
     } catch (error) {
       console.error("Error buying item:", error)
       setError("Error buying item. Please try again.")
     }
+  }
+
+  const handlePlaceAnotherOrder = () => {
+    // Reset all states to their initial values
+    setTranscript("")
+    setParsedIntent(null)
+    setRecommendations(null)
+    setPurchasedItem(null)
+    setError(null)
+    setMessages([])
+  }
+
+  const PurchaseConfirmation = ({ item }: { item: any }) => {
+    return (
+      <Card className="max-w-2xl mx-auto">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Check className="text-green-500" />
+            Purchase Successful
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-4">Your item has been successfully purchased and will be arriving at your address soon.</p>
+          <div className="bg-gray-100 p-4 rounded-lg mb-4">
+            <h3 className="font-semibold mb-2">Purchase Details:</h3>
+            <p>Item: {item?.title || "Item details not available."}</p>
+            <p>Total Cost: {item?.price?.displayValue || "Cost not available."}</p>
+            <Image
+              src={item?.images[0]?.url || "/placeholder.svg"}
+              alt={item?.title || "Product Image"}
+              className="w-full h-48 object-contain bg-white mb-4"
+              width={500}
+              height={300}
+            />
+          </div>
+          <Button onClick={handlePlaceAnotherOrder} className="w-full">
+            Place Another Order
+          </Button>
+        </CardContent>
+      </Card>
+    )
   }
 
   const ProductRecommendations = ({ recommendations }: { recommendations: Product[] }) => {
@@ -234,6 +279,9 @@ export default function HomePage() {
   return (
     <main className="container mx-auto p-4 bg-gray-50 min-h-screen">
       <h1 className="text-4xl font-bold mb-8 text-center text-gray-800">AI-Powered Voice Shopping Assistant</h1>
+      {purchasedItem ? (
+        <PurchaseConfirmation item={purchasedItem} />
+      ) : (
       <div className="max-w-4xl mx-auto">
         <div className="overflow-y-auto h-96 border border-gray-300 p-4 mb-8 rounded-lg shadow-md bg-white">
           {messages.length > 0 ? (
@@ -306,6 +354,7 @@ export default function HomePage() {
           </div>
         )}
       </div>
+      )}
     </main>
   )
 }

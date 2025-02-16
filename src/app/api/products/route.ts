@@ -14,12 +14,12 @@ const openai = new OpenAI({
 
 export async function POST(request: Request) {
   try {
-    const { items, lower, upper } = await request.json();
+    const { items } = await request.json();
 
     // 2. Step 1: Retrieve with Exa
     // We'll search the web for "best Amazon products for <items> under <budget>"
     // You can tweak the query, e.g. add domain filters or advanced options
-    const exaQuery = `best Amazon products for ${items} reasonably within price range from ${lower} to ${upper}`;
+    const exaQuery = `I want Amazon products that fit the description of ${items} the best`;
     const exaResult = await exa.searchAndContents(exaQuery, {
       type: "neural",
       useAutoprompt: true,
@@ -32,9 +32,16 @@ export async function POST(request: Request) {
     const systemPrompt = `
       You are a helpful shopping assistant. 
       You have access to these search results about Amazon products. 
-      Provide the top 8-9 product recommendations for the given item(s) and budget. 
-      Only respond with the asin (Amazon Standard Identification Number) for each product.
-      Strictly respond in valid JSON format only (no code fences, disclaimers, etc.).
+      Provide the top 20 product recommendations for the given item(s). 
+      Make sure to include the corresponding Amazon asin (Amazon Standard Identificatioin Number) for each product.
+    `;
+    const userMessage = `
+      User wants: "${items}" from Amazon. The user does not want any items that do not closely match the search for "${items}".
+      Here are the Exa search results:
+      ${JSON.stringify(exaResult)}
+
+      Please parse through all of the items and suggest the top 7-10 products, strictly responding in valid JSON format only (no code fences, disclaimers, etc.).
+      Only respond with the corresponding asin (Amazon Standard Identification Number) for each product.
       Example final output:
       [
         {
@@ -42,13 +49,6 @@ export async function POST(request: Request) {
         },
         ...
       ]
-    `;
-    const userMessage = `
-      User wants: "${items}" within a budget range of $${lower} to $${upper}.
-      Here are the Exa search results:
-      ${JSON.stringify(exaResult)}
-
-      Please suggest the top 8-9 products in valid JSON format only.
     `;
 
     // 4. Call OpenAI Chat Completions
