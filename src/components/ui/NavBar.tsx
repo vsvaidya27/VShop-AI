@@ -41,13 +41,9 @@ export function NavigationHeader() {
       const data = await response.json();
       console.log("Fetched Price Feed:", data);
 
-      // data = { price: "2711", timestamp: "1739707203" }
-
-      // 1. Parse them into numbers
       const numericPrice = parseFloat(data.price);
       const numericTimestamp = parseInt(data.timestamp, 10);
 
-      // 2. Store in state
       setPriceFeed({
         price: numericPrice,
         timestamp: numericTimestamp,
@@ -73,10 +69,12 @@ export function NavigationHeader() {
       </nav>
 
       <div className="flex items-center gap-4">
-        {/* Show price if we have a numeric priceFeed */}
         {priceFeed && (
           <div className="text-sm font-medium">
             1 ETH = ${priceFeed.price.toFixed(2)} USD
+            <div className="text-gray-400 text-sm text-center">
+              Data provided by <a href="https://eoracle.io" className="text-blue-400 underline">eoracle.io</a> AVS
+            </div>
           </div>
         )}
 
