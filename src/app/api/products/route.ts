@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       Here are the Exa search results:
       ${JSON.stringify(exaResult)}
 
-      Please parse through all of the items and suggest the top 7-10 products, strictly responding in valid JSON format only (no code fences, disclaimers, etc.).
+      Please parse through all of the items and suggest the top 12-15 products, strictly responding in valid JSON format only (no code fences, disclaimers, etc.).
       Only respond with the corresponding asin (Amazon Standard Identification Number) for each product.
       Example final output:
       [
