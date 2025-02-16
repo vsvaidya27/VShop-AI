@@ -31,9 +31,10 @@ VShop AI is a **voice-first, AI-driven shopping agent** that bridges the digital
    cd vshop-ai
    npm install
 
-2. Set Up Environment
+2. **Set Up Environment**
     Create a .env.local with your keys:
 
+    ```bash
     OPENAI_API_KEY=
     PERPLEXITY_API_KEY=
     EXA_API_KEY=
@@ -43,7 +44,8 @@ VShop AI is a **voice-first, AI-driven shopping agent** that bridges the digital
 
 These environment variables are required for AI-driven parsing, product data retrieval, and multi-currency checkout.
 
-3. Run Development Server
+3. **Run Development Server**
 
+    ```bash
     npm run dev
     # Open http://localhost:3000
