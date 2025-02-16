@@ -77,6 +77,9 @@ export function NavigationHeader() {
         {priceFeed && (
           <div className="text-sm font-medium">
             1 ETH = ${priceFeed.price.toFixed(2)} USD
+            <div className="text-gray-400 text-sm text-center">
+              Data provided by <a href="https://eoracle.io" className="text-blue-400 underline">eoracle.io</a> AVS
+            </div>
           </div>
         )}
 
