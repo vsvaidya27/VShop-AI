@@ -84,9 +84,10 @@ export async function POST(request: Request) {
     // Log the products before returning
     console.log("Products to return:", parsed);
 
-    const asins = parsed.map((obj: any) => obj.asin).filter(Boolean);
+    // Extract ASINs and remove duplicates using a Set
+    const asins = Array.from(new Set(parsed.map((obj: any) => obj.asin).filter(Boolean)));
 
-    // Return the ASINs directly
+    // Return the unique ASINs directly
     return NextResponse.json(asins);
   } catch (err: any) {
     console.error("Error in /api/products route:", err);

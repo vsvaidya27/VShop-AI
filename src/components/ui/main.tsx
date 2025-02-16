@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 "use client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -139,6 +139,32 @@ export default function Main() {
     }
   }
 
+  const handleProductAudio = useCallback(async (productsData) => {
+    try {
+      const scripted = productsData.length === 0 ?  `We found ${productsData.length} products.` : `We found ${productsData.length} products. Here they are:`;
+      // Play the announcement audio
+      const announcementBlob = await createAudioStreamFromText(scripted);
+      const announcementUrl = URL.createObjectURL(announcementBlob);
+      const announcementAudio = new Audio(announcementUrl);
+      await announcementAudio.play(); // Play the announcement audio
+
+      for (const [index, product] of productsData.entries()) { // Use entries to get index
+        const numberedTitle = `${index + 1}.  ${product.title}`; // Create a numbered title
+        const audioBlob1 = await createAudioStreamFromText(numberedTitle);
+        const audioUrl1 = URL.createObjectURL(audioBlob1);
+        const audio1 = new Audio(audioUrl1);
+
+        // Create a promise that resolves when the audio ends
+        await new Promise((resolve) => {
+          audio1.onended = resolve; // Resolve the promise when the audio ends
+          audio1.play(); // Play the audio
+        });
+      }
+    } catch (error) {
+      console.error("Error playing audio for products:", error);
+    }
+  }, []);
+
   const processTranscript = async () => {
     console.log("Processing transcript:", transcript)
     setIsProcessing(true)
@@ -182,7 +208,6 @@ export default function Main() {
         return
         // You can add additional logic here if needed
       }
-
       // Check if the AI message indicates it didn't understand
       else if (formattedIntent.join(", ") === "I didn't understand, please try again." || formattedIntent.join(", ") === "[I didn't understand, please try again.]" ) {
         const aiMessage = { role: "assistant", content: "I didn't understand, please try again." }
@@ -194,44 +219,49 @@ export default function Main() {
           const audio = new Audio(audioUrl)
           await audio.play() // Play the audio
           return
-        }
-  
-      const searchMessage = `Searching for: ${formattedIntent.join(", ")}`
-      const aiMessage = { role: "assistant", content: searchMessage }
-
-      setMessages((prev) => [...prev, aiMessage])
-      setParsedIntent(formattedIntent)
-      const audioBlob = await createAudioStreamFromText(searchMessage)
-      const audioUrl = URL.createObjectURL(audioBlob)
-      const audio = new Audio(audioUrl)
-      await audio.play() // Play the audio
-
-
-      const asinsRes = await fetch("/api/products", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: formattedIntent,
-        }),
-      })
-      const asinsData: string[] = await asinsRes.json()
-      console.log("Returned ASINs:", asinsData)
-
-      const listRes = await fetch("/api/rye-list", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ asins: asinsData }),
-      })
-      if (!listRes.ok) {
-        const errorData = await listRes.json()
-        throw new Error(
-          `Rye list request failed with status ${listRes.status}: ${errorData.message || "Unknown error"}`,
-        )
       }
-      const productsData: Product[] = await listRes.json()
-      console.log("Product details:", productsData)
+      else{
+        const searchMessage = `Searching for: ${formattedIntent.join(", ")}`
+        const aiMessage = { role: "assistant", content: searchMessage }
 
-      setRecommendations(productsData)
+        setMessages((prev) => [...prev, aiMessage])
+        setParsedIntent(formattedIntent)
+        const audioBlob = await createAudioStreamFromText(searchMessage)
+        const audioUrl = URL.createObjectURL(audioBlob)
+        const audio = new Audio(audioUrl)
+        await audio.play() // Play the audio
+
+
+        const asinsRes = await fetch("/api/products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: formattedIntent,
+          }),
+        })
+        const asinsData: string[] = await asinsRes.json()
+        console.log("Returned ASINs:", asinsData)
+
+        const listRes = await fetch("/api/rye-list", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ asins: asinsData }),
+        })
+        if (!listRes.ok) {
+          const errorData = await listRes.json()
+          throw new Error(
+            `Rye list request failed with status ${listRes.status}: ${errorData.message || "Unknown error"}`,
+          )
+        }
+        const productsData: Product[] = await listRes.json()
+        console.log("Product details:", productsData)
+        
+
+        setRecommendations(productsData)
+        // Play audio for the message
+        await handleProductAudio(productsData)
+        
+    }
     } catch (error) {
       console.error("Error processing transcript:", error)
       setError("Error processing transcript. Please try again.")
@@ -351,33 +381,29 @@ export default function Main() {
 
   const ProductRecommendations = ({ recommendations }: { recommendations: Product[] }) => {
     const seenAsins = new Set(); // To track seen ASINs
+
     return (
       <div className="grid gap-6 md:grid-cols-2">
-        <AnimatePresence>
           {recommendations.length > 0 ? (
-            recommendations.map((product, index) => {
-              const key = product.ASIN || product.id || index; // Create a unique key
+              recommendations.map((product) => {
+              console.log(recommendations)
+              const key = product.ASIN; // Create a unique key
               if (seenAsins.has(key)) {
-                console.warn(`Duplicate ASIN detected: ${key}`); // Log duplicate ASINs
+                console.warn(`Duplicate ASIN detected: ${key}`);
+                return null; // Skip rendering this product
               } else {
                 seenAsins.add(key); // Add to seen ASINs
               }
+
               return (
-                <motion.div
-                  key={`${key}-${index}`} // Ensure unique key
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.3, delay: index * 0.1 }}
-                >
-                  <Card className="flex flex-col h-full bg-gray-800 text-white shadow-lg border-green-500">
+                  <Card key={product.ASIN} className="flex flex-col h-full bg-gray-800 text-white shadow-lg border-green-500">
                     <CardHeader className="flex-none">
                       <CardTitle className="line-clamp-2 h-12 text-green-400">{product.title}</CardTitle>
                     </CardHeader>
                     <CardContent className="flex-1 flex flex-col">
                       <div className="flex-none">
                         <Image
-                          src={product.images[0].url || "/placeholder.svg"}
+                          src={product.images[0]?.url || "/placeholder.svg"}
                           alt={product.title}
                           className="w-full h-48 object-contain bg-gray-700 rounded-lg"
                           width={500}
@@ -406,16 +432,13 @@ export default function Main() {
                       </div>
                     </CardContent>
                   </Card>
-                </motion.div>
               );
-            })
-          ) : (
+            })) : (
             <p className="text-center text-gray-400">No products found or an error occurred.</p>
           )}
-        </AnimatePresence>
       </div>
-    );
-  }
+  )
+}
 
   return (
     <main className="container mx-auto p-4 text-white min-h-screen">
