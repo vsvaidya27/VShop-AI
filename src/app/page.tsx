@@ -1,17 +1,18 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 "use client"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, ShoppingCart } from "lucide-react"
+import { AlertCircle, ShoppingCart, Mic, StopCircle, Send, DollarSign } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import Image from "next/image"
 import { Check } from "lucide-react"
+import { Progress } from "@/components/ui/progress"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { motion, AnimatePresence } from "framer-motion"
 
 interface Product {
-  id: string // Matches Rye's "id" field
+  id: string
   title: string
   marketplace: string
   description: string
@@ -36,6 +37,7 @@ export default function HomePage() {
   const [recommendations, setRecommendations] = useState<Product[] | null>(null)
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([])
   const [purchasedItem, setPurchasedItem] = useState<any>(null)
+  const [progress, setProgress] = useState(0)
 
   useEffect(() => {
     if (error) {
@@ -43,6 +45,17 @@ export default function HomePage() {
       return () => clearTimeout(timer)
     }
   }, [error])
+
+  useEffect(() => {
+    if (isProcessing) {
+      const interval = setInterval(() => {
+        setProgress((prevProgress) => (prevProgress >= 100 ? 0 : prevProgress + 10))
+      }, 500)
+      return () => clearInterval(interval)
+    } else {
+      setProgress(0)
+    }
+  }, [isProcessing])
 
   const startRecording = async () => {
     console.log("Starting recording...")
@@ -107,9 +120,6 @@ export default function HomePage() {
       const data = await response.json()
       console.log("API Response:", data.parsedIntent)
 
-      
-
-      // If the response is valid, process it
       let formattedIntent
       try {
         formattedIntent = JSON.parse(data.parsedIntent)
@@ -117,7 +127,6 @@ export default function HomePage() {
         console.error("Failed to parse parsedIntent:", error)
         formattedIntent = [data.parsedIntent]
       }
-      // Check if the AI message indicates it didn't understand
       if (formattedIntent.join(", ") === "I didn't understand, please try again.") {
         const aiMessage = { role: "assistant", content: "I didn't understand, please try again." }
         setMessages((prev) => [...prev, aiMessage])
@@ -130,7 +139,6 @@ export default function HomePage() {
       setMessages((prev) => [...prev, aiMessage])
       setParsedIntent(formattedIntent)
 
-      // 2. Get ASINs from /api/products
       const asinsRes = await fetch("/api/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -141,7 +149,6 @@ export default function HomePage() {
       const asinsData: string[] = await asinsRes.json()
       console.log("Returned ASINs:", asinsData)
 
-      // 3. Fetch actual product details from /api/rye-list
       const listRes = await fetch("/api/rye-list", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -165,12 +172,8 @@ export default function HomePage() {
     }
   }
 
-  // Updated to call /api/rye-buy
   const handleBuyNow = async (asin: string) => {
-     // 1) Find the product from recommendations
-    const product = recommendations?.find(
-      (prod) => prod.ASIN === asin || prod.id === asin
-    );
+    const product = recommendations?.find((prod) => prod.ASIN === asin || prod.id === asin)
     try {
       const response = await fetch("/api/rye-buy", {
         method: "POST",
@@ -184,10 +187,10 @@ export default function HomePage() {
       }
 
       const data = await response.json()
-      console.log("Item bought successfully:", data);
+      console.log("Item bought successfully:", data)
 
-      setPurchasedItem(product);
-      setRecommendations((prev) => prev);
+      setPurchasedItem(product)
+      setRecommendations((prev) => prev)
     } catch (error) {
       console.error("Error buying item:", error)
       setError("Error buying item. Please try again.")
@@ -195,7 +198,6 @@ export default function HomePage() {
   }
 
   const handlePlaceAnotherOrder = () => {
-    // Reset all states to their initial values
     setTranscript("")
     setParsedIntent(null)
     setRecommendations(null)
@@ -206,28 +208,28 @@ export default function HomePage() {
 
   const PurchaseConfirmation = ({ item }: { item: any }) => {
     return (
-      <Card className="max-w-2xl mx-auto">
+      <Card className="max-w-2xl mx-auto bg-gray-800 text-white shadow-lg border-green-500">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-green-400">
             <Check className="text-green-500" />
             Purchase Successful
           </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="mb-4">Your item has been successfully purchased and will be arriving at your address soon.</p>
-          <div className="bg-gray-100 p-4 rounded-lg mb-4">
-            <h3 className="font-semibold mb-2">Purchase Details:</h3>
+          <div className="bg-gray-700 p-4 rounded-lg mb-4">
+            <h3 className="font-semibold mb-2 text-green-400">Purchase Details:</h3>
             <p>Item: {item?.title || "Item details not available."}</p>
             <p>Total Cost: {item?.price?.displayValue || "Cost not available."}</p>
             <Image
               src={item?.images[0]?.url || "/placeholder.svg"}
               alt={item?.title || "Product Image"}
-              className="w-full h-48 object-contain bg-white mb-4"
+              className="w-full h-48 object-contain bg-gray-600 mb-4 rounded-lg"
               width={500}
               height={300}
             />
           </div>
-          <Button onClick={handlePlaceAnotherOrder} className="w-full">
+          <Button onClick={handlePlaceAnotherOrder} className="w-full bg-green-500 hover:bg-green-600 text-white">
             Place Another Order
           </Button>
         </CardContent>
@@ -237,124 +239,201 @@ export default function HomePage() {
 
   const ProductRecommendations = ({ recommendations }: { recommendations: Product[] }) => {
     return (
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {recommendations.length > 0 ? (
-          recommendations.map((product, index) => (
-            <Card key={product.id || product.ASIN || index} className="flex flex-col h-full">
-              <CardHeader className="flex-none">
-                <CardTitle className="line-clamp-2 h-12">{product.title}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex-1 flex flex-col">
-                <div className="flex-none">
-                  <Image
-                    src={product.images[0].url || "/placeholder.svg"}
-                    alt={product.title}
-                    className="w-full h-48 object-contain bg-white"
-                    width={500}
-                    height={300}
-                  />
-                </div>
-                <p className="text-sm text-gray-600 mt-2 line-clamp-2 flex-1">{product.description}</p>
-                <div className="flex justify-between items-center mt-4">
-                  <p className="text-sm font-medium text-green-600">Price: {product.price.displayValue}</p>
-                  {product.ASIN && <p className="text-xs text-gray-500">ASIN: {product.ASIN}</p>}
-                </div>
-                <Button
-                  className="w-full mt-4 bg-green-500 hover:bg-green-600 text-white"
-                  onClick={() => handleBuyNow(product.ASIN || product.id)}
-                >
-                  <ShoppingCart className="mr-2 h-4 w-4" />
-                  Buy Now
-                </Button>
-              </CardContent>
-            </Card>
-          ))
-        ) : (
-          <p>No products found or an error occurred.</p>
-        )}
+      <div className="grid gap-6 md:grid-cols-2">
+        <AnimatePresence>
+          {recommendations.length > 0 ? (
+            recommendations.map((product, index) => (
+              <motion.div
+                key={product.id || product.ASIN || index}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3, delay: index * 0.1 }}
+              >
+                <Card className="flex flex-col h-full bg-gray-800 text-white shadow-lg border-green-500">
+                  <CardHeader className="flex-none">
+                    <CardTitle className="line-clamp-2 h-12 text-green-400">{product.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex-1 flex flex-col">
+                    <div className="flex-none">
+                      <Image
+                        src={product.images[0].url || "/placeholder.svg"}
+                        alt={product.title}
+                        className="w-full h-48 object-contain bg-gray-700 rounded-lg"
+                        width={500}
+                        height={300}
+                      />
+                    </div>
+                    <p className="text-sm text-gray-300 mt-2 line-clamp-2 flex-1">{product.description}</p>
+                    <div className="flex justify-between items-center mt-4">
+                      <p className="text-sm font-medium text-green-400">Price: {product.price.displayValue}</p>
+                      {product.ASIN && <p className="text-xs text-gray-400">ASIN: {product.ASIN}</p>}
+                    </div>
+                    <Button
+                      className="w-full mt-4 bg-green-500 hover:bg-green-600 text-white"
+                      onClick={() => handleBuyNow(product.ASIN || product.id)}
+                    >
+                      <ShoppingCart className="mr-2 h-4 w-4" />
+                      Buy Now
+                    </Button>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))
+          ) : (
+            <p className="text-center text-gray-400">No products found or an error occurred.</p>
+          )}
+        </AnimatePresence>
       </div>
     )
   }
 
   return (
-    <main className="container mx-auto p-4 bg-gray-50 min-h-screen">
-      <h1 className="text-4xl font-bold mb-8 text-center text-gray-800">AI-Powered Voice Shopping Assistant</h1>
+    <main className="container mx-auto p-4 bg-gray-900 text-white min-h-screen">
+      <div className="flex justify-start items-center w-1/2">
+        <h1 className="text-4xl font-bold mb-8 text-left text-green-400">
+          <DollarSign className="inline-block mr-2 text-green-500" />
+          AI-Powered Smart Shopping Assistant
+        </h1>
+      </div>
       {purchasedItem ? (
         <PurchaseConfirmation item={purchasedItem} />
       ) : (
-      <div className="max-w-4xl mx-auto">
-        <div className="overflow-y-auto h-96 border border-gray-300 p-4 mb-8 rounded-lg shadow-md bg-white">
-          {messages.length > 0 ? (
-            messages.map((msg, index) => (
-              <div key={index} className={`mb-2 ${msg.role === "user" ? "text-left" : "text-right"}`}>
-                <p className={`font-semibold ${msg.role === "user" ? "text-blue-600" : "text--800"}`}>
-                  {msg.role === "user" ? "You" : "AI Agent"}:
-                </p>
-                <p className="text-gray-700">{msg.content}</p>
-              </div>
-            ))
-          ) : (
-            <p className="text-gray-500 text-center">No messages yet. Start the conversation!</p>
-          )}
-        </div>
-        <div className="flex gap-4 justify-center mb-8">
-          <Button onClick={startRecording} disabled={isRecording} size="lg" className="w-48">
-            {isRecording ? "Recording..." : "Start Recording"}
-          </Button>
-          <Button onClick={processTranscript} disabled={!transcript || isProcessing} size="lg" className="w-48">
-            {isProcessing ? "Processing..." : "Process Transcript"}
-          </Button>
-        </div>
-        {error && (
-          <Alert variant="destructive" className="mb-8">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        <div className="grid gap-8 md:grid-cols-2 mb-8">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <span className="mr-2">Transcript</span>
-                {transcript && <Badge variant="secondary">Recorded</Badge>}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-700">
-                {transcript || "No transcript available. Start recording to see the transcript."}
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <span className="mr-2">Parsed Intent</span>
-                {parsedIntent && (
-                  <Badge className="bg-green-500 text-white">
-                    <ShoppingCart className="mr-1 h-3 w-3" />
-                    Shopping Intent
-                  </Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {parsedIntent ? (
-                <p className="whitespace-pre-wrap text-gray-700">{parsedIntent}</p>
-              ) : (
-                <p className="text-gray-500">No intent parsed yet. Process the transcript to see the results.</p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-        {recommendations && (
-          <div className="mt-8">
-            <h2 className="text-3xl font-bold mb-6 text-center text-gray-800">Product Recommendations</h2>
-            <ProductRecommendations recommendations={recommendations} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div>
+            <Card className="mb-8 bg-gray-800 shadow-lg border-green-500">
+              <CardHeader>
+                <CardTitle className="text-green-400">Voice Assistant</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex justify-center mb-4">
+                  <Button
+                    onClick={isRecording ? () => {} : startRecording}
+                    disabled={isRecording}
+                    size="lg"
+                    className={`w-16 h-16 rounded-full ${isRecording ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"}`}
+                  >
+                    {isRecording ? <StopCircle className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+                  </Button>
+                </div>
+                <Card className="mb-4 bg-gray-700">
+                  <CardHeader>
+                    <CardTitle className="flex items-center text-green-400">
+                      <span className="mr-2">Transcript</span>
+                      {transcript && (
+                        <Badge variant="secondary" className="bg-green-200 text-green-700">
+                          Recorded
+                        </Badge>
+                      )}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-gray-300">
+                      {transcript || "No transcript available. Start recording to see the transcript."}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Button
+                  onClick={processTranscript}
+                  disabled={!transcript || isProcessing}
+                  size="lg"
+                  className="w-full bg-blue-500 hover:bg-blue-600"
+                >
+                  {isProcessing ? (
+                    <>
+                      <span className="mr-2">Processing...</span>
+                      <Progress value={progress} className="w-[100px]" />
+                    </>
+                  ) : (
+                    "Process Transcript"
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gray-800 shadow-lg border-green-500">
+              <CardHeader>
+                <CardTitle className="text-green-400">Chat with AI Shopping Assistant</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="h-[300px] w-full rounded-md border border-gray-600 p-4 bg-gray-700">
+                  {messages.length > 0 ? (
+                    messages.map((msg, index) => (
+                      <div key={index} className={`mb-4 ${msg.role === "user" ? "text-right" : "text-left"}`}>
+                        <Badge
+                          variant={msg.role === "user" ? "secondary" : "default"}
+                          className={`mb-2 ${msg.role === "user" ? "bg-blue-200 text-blue-700" : "bg-green-200 text-green-700"}`}
+                        >
+                          {msg.role === "user" ? "You" : "AI"}
+                        </Badge>
+                        <p
+                          className={`p-3 rounded-lg inline-block max-w-[80%] shadow-sm ${msg.role === "user" ? "bg-blue-900" : "bg-green-900"}`}
+                        >
+                          {msg.content}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-center text-gray-400">Start the conversation with the AI shopping assistant!</p>
+                  )}
+                </ScrollArea>
+                <div className="flex mt-4">
+                  <input
+                    type="text"
+                    placeholder="Type your message..."
+                    className="flex-grow p-2 border border-gray-600 rounded-l-md focus:outline-none focus:ring-2 focus:ring-green-500 bg-gray-700 text-white"
+                    value={transcript}
+                    onChange={(e) => setTranscript(e.target.value)}
+                  />
+                  <Button
+                    onClick={processTranscript}
+                    disabled={!transcript || isProcessing}
+                    className="rounded-l-none bg-green-500 hover:bg-green-600 h-10.5"
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    Send
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        )}
-      </div>
+
+          <div>
+            {error && (
+              <Alert variant="destructive" className="mb-8 bg-red-900 border-red-500">
+                <AlertCircle className="h-4 w-4 text-red-400" />
+                <AlertTitle className="text-red-400">Error</AlertTitle>
+                <AlertDescription className="text-red-300">{error}</AlertDescription>
+              </Alert>
+            )}
+            {/* {parsedIntent && (
+              <Card className="mb-8 bg-gray-800 shadow-lg border-green-500">
+                <CardHeader>
+                  <CardTitle className="flex items-center text-green-400">
+                    <span className="mr-2">Parsed Intent</span>
+                    <Badge className="bg-blue-200 text-blue-700">
+                      <ShoppingCart className="mr-1 h-3 w-3" />
+                      Shopping Intent
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="whitespace-pre-wrap text-gray-300">{parsedIntent}</p>
+                </CardContent>
+              </Card>
+            )} */}
+            {recommendations && (
+              <div className="mt-5000 flex justify-end">
+                <div className="w-full">
+                  <h2 className="text-3xl font-bold mb-4 text-center text-green-400">Product Recommendations</h2>
+                  <ProductRecommendations recommendations={recommendations} />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </main>
   )
 }
+
