@@ -35,6 +35,7 @@ export default function HomePage() {
   const [parsedIntent, setParsedIntent] = useState<string | null>(null)
   const [priceRange, setPriceRange] = useState([0, 1000])
   const [recommendations, setRecommendations] = useState<Product[] | null>(null)
+  const [messages, setMessages] = useState<{ role: string; content: string }[]>([])
 
   useEffect(() => {
     if (error) {
@@ -89,32 +90,52 @@ export default function HomePage() {
     setParsedIntent(null)
     setRecommendations(null)
     try {
-      // 1. Parse the user's intent
-      const intentRes = await fetch("/api/intent", {
+      const userMessage = { role: "user", content: transcript }
+      setMessages((prev) => [...prev, userMessage])
+
+      const response = await fetch("/api/intent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: transcript,
-          priceRange: {
-            min: priceRange[0],
-            max: priceRange[1],
-          },
-        }),
+        body: JSON.stringify({ text: transcript }),
       })
-      if (!intentRes.ok) {
-        const errorData = await intentRes.json()
-        throw new Error(`API request failed with status ${intentRes.status}: ${errorData.message || "Unknown error"}`)
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(`API request failed with status ${response.status}: ${errorData.message || "Unknown error"}`)
       }
-      const intentData = await intentRes.json()
-      console.log(intentData.parsedIntent)
-      setParsedIntent(intentData.parsedIntent)
+
+      const data = await response.json()
+      console.log("API Response:", data.parsedIntent)
+
+      
+
+      // If the response is valid, process it
+      let formattedIntent
+      try {
+        formattedIntent = JSON.parse(data.parsedIntent)
+      } catch (error) {
+        console.error("Failed to parse parsedIntent:", error)
+        formattedIntent = [data.parsedIntent]
+      }
+      // Check if the AI message indicates it didn't understand
+      if (formattedIntent.join(", ") === "I didn't understand, please try again.") {
+        const aiMessage = { role: "assistant", content: "I didn't understand, please try again." }
+        setMessages((prev) => [...prev, aiMessage])
+        return
+      }
+
+      const searchMessage = `Searching for: ${formattedIntent.join(", ")}`
+      const aiMessage = { role: "assistant", content: searchMessage }
+
+      setMessages((prev) => [...prev, aiMessage])
+      setParsedIntent(formattedIntent)
 
       // 2. Get ASINs from /api/products
       const asinsRes = await fetch("/api/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: intentData.parsedIntent,
+          items: formattedIntent,
           lower: priceRange[0],
           upper: priceRange[1],
         }),
@@ -214,27 +235,20 @@ export default function HomePage() {
     <main className="container mx-auto p-4 bg-gray-50 min-h-screen">
       <h1 className="text-4xl font-bold mb-8 text-center text-gray-800">AI-Powered Voice Shopping Assistant</h1>
       <div className="max-w-4xl mx-auto">
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="text-2xl">Set Your Budget</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-4">
-              <DollarSign className="h-6 w-6 text-green-500" />
-              <Slider
-                min={0}
-                max={1000}
-                step={10}
-                value={priceRange}
-                onValueChange={setPriceRange}
-                className="flex-grow"
-              />
-              <span className="min-w-[100px] text-right text-lg font-semibold">
-                ${priceRange[0]} - ${priceRange[1]}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="overflow-y-auto h-96 border border-gray-300 p-4 mb-8 rounded-lg shadow-md bg-white">
+          {messages.length > 0 ? (
+            messages.map((msg, index) => (
+              <div key={index} className={`mb-2 ${msg.role === "user" ? "text-left" : "text-right"}`}>
+                <p className={`font-semibold ${msg.role === "user" ? "text-blue-600" : "text--800"}`}>
+                  {msg.role === "user" ? "You" : "AI Agent"}:
+                </p>
+                <p className="text-gray-700">{msg.content}</p>
+              </div>
+            ))
+          ) : (
+            <p className="text-gray-500 text-center">No messages yet. Start the conversation!</p>
+          )}
+        </div>
         <div className="flex gap-4 justify-center mb-8">
           <Button onClick={startRecording} disabled={isRecording} size="lg" className="w-48">
             {isRecording ? "Recording..." : "Start Recording"}

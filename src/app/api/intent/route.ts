@@ -21,7 +21,7 @@ export async function POST(request: Request) {
           {
             role: "system",
             content:
-              "You are a shopping assistant. Extract the user's shopping intent from their text. If the user does specify which items to buy specifically, identify and return the items that are most suited to match their intent. You will respond with a JSON array of item names (strings) only. No additional text, no explanation, just the array. Example: [\"Watch\", \"Gaming Accessories\", \"Book\"]",
+              "You are a shopping assistant. If you do not understand, please respond with [\"I didn't understand, please try again.\"]. Your goal is to extract the user's shopping intent from their text. If the user does specify which items to buy specifically, identify and return the items that are most suited to match their intent. Ask one question to better understand what the user wants. After, Respond with a JSON array of item names (strings) only. No additional text, no explanation, just the array. Example: [\"Watch\", \"Gaming Accessories\", \"Book\"]", 
           },
           {
             role: "user",
